@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "verified_on": "2026-08-10",
+  "note": "Recznie zweryfikowany punkt startowy. Skaner dopisuje do tego nowe znaleziska; wpisy z katalogu nigdy nie sa nadpisywane.",
+  "entries": [
+    {
+      "uid": "catalog:unreal-mcp-chongdashu",
+      "name": "chongdashu/unreal-mcp",
+      "url": "https://github.com/chongdashu/unreal-mcp",
+      "profile": "unreal-mcp",
+      "kind": "mcp-server",
+      "summary": "Najpopularniejszy MCP do Unreal Engine (C++ plugin + serwer). Sterowanie edytorem, aktorami i Blueprintami z Claude/Cursor.",
+      "uefn_fit": "Nie zadziala 1:1 w UEFN (wymaga kompilacji pluginu C++, czego UEFN nie pozwala), ale jego lista narzedzi to najlepsza mapa drogowa dla Twojego serwera.",
+      "tags": ["unreal", "mcp", "reference"]
+    },
+    {
+      "uid": "catalog:unreal-mcp-runreal",
+      "name": "runreal/unreal-mcp",
+      "url": "https://github.com/runreal/unreal-mcp",
+      "profile": "unreal-mcp",
+      "kind": "mcp-server",
+      "summary": "MCP oparty o Unreal Python Remote Execution - czysty Python, bez kompilacji C++.",
+      "uefn_fit": "Architektura najblizsza Twojej (Python, zero C++). Dobre zrodlo gotowych implementacji narzedzi do przeniesienia.",
+      "tags": ["unreal", "mcp", "python", "portable"]
+    },
+    {
+      "uid": "catalog:unreal-gen-ai-support",
+      "name": "prajwalshettydev/UnrealGenAISupport",
+      "url": "https://github.com/prajwalshettydev/UnrealGenAISupport",
+      "profile": "ai-3d",
+      "kind": "plugin",
+      "summary": "Plugin UE5 spinajacy generatory 3D (Meshy, Tripo, Hunyuan3D, Rodin) i LLM-y bezposrednio w edytorze, plus wlasny serwer MCP.",
+      "uefn_fit": "Plugin nie wejdzie do UEFN, ale pokazuje dokladnie jak wywolywac API generatorow 3D i wciagac wynik do silnika - to logika do przepisania w Pythonie po stronie listenera.",
+      "tags": ["3d-generation", "meshy", "tripo", "hunyuan3d", "rodin", "reference"]
+    },
+    {
+      "uid": "catalog:mcp-blender-rfingadam",
+      "name": "RFingAdam/mcp-blender",
+      "url": "https://github.com/RFingAdam/mcp-blender",
+      "profile": "blender-bridge",
+      "kind": "mcp-server",
+      "summary": "Rozbudowany MCP do Blendera (~218 narzedzi) z wbudowanym generowaniem 3D przez Meshy, Tripo, TripoSR, Stable Fast 3D, Hunyuan3D i ComfyUI, plus automatyczne czyszczenie i decymacja mesha.",
+      "uefn_fit": "Najmocniejszy kandydat na brakujace ogniwo: prompt -> mesh -> cleanup -> eksport FBX. Potem Twoj UEFN MCP importuje plik i ustawia kolizje/LOD.",
+      "tags": ["blender", "mcp", "3d-generation", "cleanup", "priority"]
+    },
+    {
+      "uid": "catalog:blender-mcp-ahujasid",
+      "name": "ahujasid/blender-mcp",
+      "url": "https://github.com/ahujasid/blender-mcp",
+      "profile": "blender-bridge",
+      "kind": "mcp-server",
+      "summary": "Oryginalny i najszerzej znany BlenderMCP - addon do Blendera + serwer MCP, integracje z Poly Haven i generatorami 3D.",
+      "uefn_fit": "Najprostszy start dla mostu Blender <-> Claude. Sprawdz aktualny stan repo przed instalacja.",
+      "tags": ["blender", "mcp", "popular"]
+    },
+    {
+      "uid": "catalog:tripo-mcp",
+      "name": "Tripo 3D MCP (vast-ai-research)",
+      "url": "https://www.tripo3d.ai/",
+      "profile": "ai-3d",
+      "kind": "service+mcp",
+      "summary": "Oficjalny serwer MCP producenta Tripo. Generowanie z tekstu i obrazu, ok. 10 s na model, eksport do GLB/FBX.",
+      "uefn_fit": "Najszybsza sciezka 'prompt -> plik' do wpiecia w Claude Code. Platne per generacja, wymaga klucza API.",
+      "tags": ["3d-generation", "text-to-3d", "image-to-3d", "paid", "priority"]
+    },
+    {
+      "uid": "catalog:meshy",
+      "name": "Meshy AI",
+      "url": "https://www.meshy.ai/",
+      "profile": "ai-3d",
+      "kind": "service",
+      "summary": "Generator 3D z API, teksturami PBR, auto-riggingiem i wtyczkami do silnikow. Najbardziej przewidywalna jakosc dla assetow do gier.",
+      "uefn_fit": "Dobre PBR i topologia po remeshu; eksport FBX wchodzi do UEFN. Model subskrypcyjny/kredytowy.",
+      "tags": ["3d-generation", "pbr", "rigging", "paid", "priority"]
+    },
+    {
+      "uid": "catalog:hunyuan3d",
+      "name": "Tencent Hunyuan3D",
+      "url": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2",
+      "profile": "ai-3d",
+      "kind": "model",
+      "summary": "Open-source: z jednego lub kilku obrazow robi teksturowany mesh (GLB/OBJ). Uruchamialny lokalnie na wlasnym GPU.",
+      "uefn_fit": "Zero kosztow per model i brak limitow, ale potrzebujesz mocnego GPU i wlasnego opakowania w API/MCP.",
+      "tags": ["3d-generation", "open-source", "local", "gpu"]
+    },
+    {
+      "uid": "catalog:ai-forge-mcp",
+      "name": "HurtzDonutStudios/ai-forge-mcp",
+      "url": "https://github.com/HurtzDonutStudios/ai-forge-mcp",
+      "profile": "agent-tooling",
+      "kind": "mcp-suite",
+      "summary": "Zestaw 16 serwerow MCP spinajacych Blender, Substance, Maya, Houdini i UE5 w jeden pipeline produkcji assetow.",
+      "uefn_fit": "Za ciezkie na start, ale to gotowy wzorzec podzialu odpowiedzialnosci miedzy serwerami MCP.",
+      "tags": ["pipeline", "mcp", "reference"]
+    },
+    {
+      "uid": "catalog:monolith-ue",
+      "name": "tumourlove/monolith",
+      "url": "https://github.com/tumourlove/monolith",
+      "profile": "unreal-mcp",
+      "kind": "mcp-server",
+      "summary": "MCP do UE 5.7/5.8 z ponad 1400 akcjami w 25 przestrzeniach nazw (Blueprinty, materialy, Niagara, animacje, mesh).",
+      "uefn_fit": "Kopalnia pomyslow na nazewnictwo i granulacje narzedzi przy rozbudowie Twoich 28 toolow.",
+      "tags": ["unreal", "mcp", "reference"]
+    },
+    {
+      "uid": "catalog:uefn-import-docs",
+      "name": "Epic: Importing Assets in UEFN",
+      "url": "https://dev.epicgames.com/documentation/fortnite/importing-assets-in-unreal-editor-for-fortnite",
+      "profile": "uefn",
+      "kind": "docs",
+      "summary": "Oficjalna dokumentacja importu wlasnych assetow do UEFN (FBX, tekstury, limity).",
+      "uefn_fit": "Zrodlo prawdy o tym, co wolno zaimportowac i jakie sa limity budzetu pamieci wyspy.",
+      "tags": ["uefn", "docs", "import"]
+    },
+    {
+      "uid": "catalog:gltf-transform",
+      "name": "gltf-transform",
+      "url": "https://gltf-transform.dev/",
+      "profile": "pipeline",
+      "kind": "cli",
+      "summary": "CLI i biblioteka do optymalizacji glTF/GLB: simplify, weld, dedup, kompresja tekstur, redukcja draw calli.",
+      "uefn_fit": "Idealny krok posredni miedzy generatorem AI a Blenderem - scina wagę mesha zanim trafi do UEFN.",
+      "tags": ["gltf", "optimize", "cli", "priority"]
+    }
+  ]
+}

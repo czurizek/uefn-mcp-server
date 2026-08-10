@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "ai-3d",
+      "title": "AI generowanie modeli 3D (text/image -> mesh)",
+      "why": "Twoj najwiekszy problem: ladne modele 3D. Tu szukamy generatorow mesh + ich integracji z pipeline'em.",
+      "weight": 1.35,
+      "queries": {
+        "github": [
+          "text-to-3d mesh generation in:name,description,readme stars:>30",
+          "image-to-3d textured mesh glb in:name,description,readme stars:>30",
+          "topic:text-to-3d",
+          "topic:3d-generation",
+          "hunyuan3d OR trellis OR triposr in:name,description stars:>50",
+          "meshy OR tripo OR rodin mcp in:name,description",
+          "auto retopology OR mesh decimation game-ready in:name,description stars:>30"
+        ],
+        "npm": ["text to 3d mcp", "meshy", "tripo 3d"],
+        "pypi": ["hunyuan3d", "trellis3d", "triposr", "meshy", "tripo", "text2mesh", "shap-e"],
+        "mcp_registry": ["3d", "mesh", "blender", "model generation"]
+      },
+      "require_any": ["3d", "mesh", "glb", "obj", "gltf"],
+      "boost": [
+        "text-to-3d", "image-to-3d", "textured", "pbr", "game-ready", "retopology",
+        "quad", "uv", "lod", "rigging", "auto-rig", "fbx", "gltf", "glb", "mcp",
+        "meshy", "tripo", "hunyuan", "rodin", "trellis", "comfyui", "generation", "generator"
+      ],
+      "negative": [
+        "3d printing", "slicer", "cad drawing", "medical", "point cloud lidar",
+        "nerf viewer", "geospatial", "logistics", "freight", "load planning",
+        "cesium", "3d tiles", "webgl framework"
+      ]
+    },
+    {
+      "id": "uefn",
+      "title": "UEFN / Fortnite Creative - narzedzia i automatyzacja",
+      "why": "Wszystko co dotyka bezposrednio UEFN: importery, walidatory, generatory wysp, Verse.",
+      "weight": 1.3,
+      "queries": {
+        "github": [
+          "uefn in:name,description,readme",
+          "topic:uefn",
+          "\"unreal editor for fortnite\" in:readme,description",
+          "fortnite creative tool in:name,description stars:>5"
+        ],
+        "npm": ["uefn", "fortnite creative"],
+        "pypi": ["uefn", "fortnite"],
+        "mcp_registry": ["uefn", "fortnite"]
+      },
+      "require_any": ["uefn", "fortnite", "verse"],
+      "boost": ["mcp", "python", "automation", "import", "device", "island", "verse", "asset", "validation"],
+      "negative": ["cheat", "aimbot", "hack", "skin changer", "tracker stats", "account generator"]
+    },
+    {
+      "id": "unreal-mcp",
+      "title": "Unreal Engine / MCP - sterowanie edytorem przez AI",
+      "why": "UEFN to UE5 pod spodem. Wiekszosc tych narzedzi da sie przeniesc lub podpatrzec (28 toolow to dopiero poczatek).",
+      "weight": 1.2,
+      "queries": {
+        "github": [
+          "unreal mcp server in:name,description stars:>20",
+          "topic:unreal-engine topic:mcp-server",
+          "unreal engine python editor automation in:name,description stars:>30",
+          "topic:ue5-plugin topic:mcp"
+        ],
+        "npm": ["unreal mcp", "unreal engine mcp"],
+        "pypi": ["unreal mcp", "unreal engine"],
+        "mcp_registry": ["unreal", "game engine", "editor"]
+      },
+      "require_any": ["unreal", "ue5", "ue4", "uefn"],
+      "boost": ["mcp", "mcp-server", "python", "blueprint", "actor", "asset", "automation", "claude", "plugin"],
+      "negative": ["cheat", "sdk dumper", "injector", "save editor", "palworld", "website"]
+    },
+    {
+      "id": "blender-bridge",
+      "title": "Blender jako most: czyszczenie i przygotowanie mesha pod UEFN",
+      "why": "Generator AI daje surowy mesh. Blender (sterowany przez MCP) robi z niego asset gotowy do importu w FBX.",
+      "weight": 1.15,
+      "queries": {
+        "github": [
+          "blender mcp server in:name,description stars:>20",
+          "topic:blender topic:mcp",
+          "blender addon batch export fbx game in:name,description stars:>30",
+          "blender automation headless python pipeline in:name,description stars:>50"
+        ],
+        "npm": ["blender mcp"],
+        "pypi": ["blender mcp", "bpy pipeline"],
+        "mcp_registry": ["blender", "3d modeling"]
+      },
+      "require_any": ["blender", "bpy", "mesh", "fbx"],
+      "boost": ["mcp", "addon", "batch", "export", "fbx", "gltf", "decimate", "uv", "lod", "bake", "headless"],
+      "negative": ["render farm pricing", "course", "tutorial only"]
+    },
+    {
+      "id": "texturing",
+      "title": "Tekstury i materialy PBR generowane AI",
+      "why": "Ladny model to w polowie tekstura. Tu szukamy generatorow map PBR i automatow do material instances.",
+      "weight": 1.0,
+      "queries": {
+        "github": [
+          "pbr texture generation ai in:name,description stars:>30",
+          "topic:pbr topic:texture",
+          "seamless texture generator normal roughness map in:name,description stars:>30",
+          "substance automation toolkit python in:name,description stars:>20"
+        ],
+        "npm": ["pbr texture generator"],
+        "pypi": ["pbr texture", "texture generator", "materialx"],
+        "mcp_registry": ["texture", "material", "image generation"]
+      },
+      "require_any": ["texture", "material", "pbr", "shader"],
+      "boost": ["pbr", "normal map", "roughness", "seamless", "tileable", "substance", "materialx", "mcp", "batch"],
+      "negative": ["css", "web theme", "font"]
+    },
+    {
+      "id": "procedural",
+      "title": "Proceduralne generowanie geometrii i leveli",
+      "why": "Alternatywa dla modelowania: budynki, kity modularne i layouty generowane kodem (PCG, geometry scripting).",
+      "weight": 1.05,
+      "queries": {
+        "github": [
+          "procedural building generator mesh in:name,description stars:>50",
+          "topic:procedural-generation topic:3d",
+          "modular kitbash generator level design in:name,description stars:>30",
+          "geometry nodes procedural asset generator in:name,description stars:>50"
+        ],
+        "npm": ["procedural 3d generator"],
+        "pypi": ["procedural generation mesh", "trimesh", "pyvista"],
+        "mcp_registry": ["procedural", "generation"]
+      },
+      "require_any": ["procedural", "generator", "geometry", "level", "building", "mesh"],
+      "boost": ["pcg", "geometry nodes", "modular", "kitbash", "city", "building", "greeble", "mcp", "unreal", "blender"],
+      "negative": ["dungeon crawler game", "roguelike gameplay", "minecraft mod"]
+    },
+    {
+      "id": "pipeline",
+      "title": "Pipeline asetow: LOD, kolizje, walidacja, budzet pamieci",
+      "why": "UEFN ma twarde limity pamieci. Te narzedzia pilnuja, zeby import nie wysadzil wyspy.",
+      "weight": 0.95,
+      "queries": {
+        "github": [
+          "game asset validation naming convention pipeline in:name,description stars:>20",
+          "automatic lod generation collision mesh tool in:name,description stars:>30",
+          "gltf optimizer draco mesh simplify cli in:name,description stars:>100",
+          "topic:asset-pipeline topic:gamedev"
+        ],
+        "npm": ["gltf-transform", "gltf pipeline optimize"],
+        "pypi": ["gltf optimize", "mesh simplify", "pygltflib"],
+        "mcp_registry": ["asset", "pipeline", "optimization"]
+      },
+      "require_any": ["asset", "mesh", "lod", "gltf", "fbx", "pipeline", "validation"],
+      "boost": ["lod", "collision", "simplify", "optimize", "draco", "validation", "naming", "batch", "cli", "budget"],
+      "negative": ["ci badge", "boilerplate template"]
+    },
+    {
+      "id": "agent-tooling",
+      "title": "Wzorce MCP / agentow do gamedevu",
+      "why": "Jak inni buduja narzedzia dla AI w gamedevie - zrodlo pomyslow na kolejne toole w Twoim serwerze.",
+      "weight": 0.85,
+      "queries": {
+        "github": [
+          "gamedev mcp server tools in:name,description stars:>30",
+          "topic:mcp-server topic:game-development",
+          "claude code skill gamedev asset in:name,description stars:>20"
+        ],
+        "npm": ["gamedev mcp"],
+        "pypi": ["mcp gamedev"],
+        "mcp_registry": ["game", "gamedev", "asset"]
+      },
+      "require_any": ["mcp", "agent", "claude", "tool"],
+      "boost": ["mcp-server", "gamedev", "unreal", "blender", "3d", "pipeline", "claude-code"],
+      "negative": ["awesome list", "chatbot template", "todo app"]
+    }
+  ]
+}

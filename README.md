@@ -123,6 +123,23 @@ The system uses two independently running Python processes:
 
 See [docs/architecture.md](docs/architecture.md) for details.
 
+## UEFN Scout — finding new tooling automatically
+
+[`scout/`](scout/README.md) is a separate, self-contained program that searches
+GitHub, the MCP registry, npm and PyPI for tools that make UEFN work easier —
+3D generators, Blender bridges, asset pipelines — scores them for relevance,
+and remembers what it has already seen so each run surfaces only what is new.
+
+```bash
+python -m scout catalog --tag priority   # hand-verified starting points
+python -m scout scan                     # search now
+python -m scout report --new             # only what appeared since last time
+```
+
+It also runs as its own MCP server (`scout/mcp_scout.py`, 6 tools), so Claude
+Code can do the searching mid-conversation. Stdlib only; `mcp` is needed just
+for the server mode. See [scout/README.md](scout/README.md).
+
 ## Configuration
 
 ### Custom port
