@@ -93,6 +93,32 @@
       "negative": ["render farm pricing", "course", "tutorial only"]
     },
     {
+      "id": "rigging",
+      "title": "Szkielety i animacja - zeby obiekty sie ruszaly",
+      "why": "Drzwi na zawiasach i machajaca flaga wymagaja szkieletu w modelu. Tu szukamy narzedzi, ktore robia go automatycznie.",
+      "weight": 1.1,
+      "queries": {
+        "github": [
+          "auto rigging skeleton mesh tool in:name,description stars:>30",
+          "topic:rigging topic:3d",
+          "automatic skinning weights bone mesh in:name,description stars:>30",
+          "blender addon rig animation export game in:name,description stars:>30"
+        ],
+        "npm": ["auto rig 3d", "mixamo"],
+        "pypi": ["auto rigging", "skeletal mesh", "rignet"],
+        "mcp_registry": ["animation", "rigging", "character"]
+      },
+      "require_any": ["rig", "rigging", "skeleton", "skinning", "bone", "animation", "animated"],
+      "boost": [
+        "auto-rig", "auto rigging", "skinning", "weights", "mixamo", "fbx",
+        "blender", "mcp", "game-ready", "retarget", "meshy", "tripo"
+      ],
+      "negative": [
+        "motion capture hardware", "vtuber", "css animation", "web animation",
+        "lottie", "vrm", "three.js", "avatar loader"
+      ]
+    },
+    {
       "id": "texturing",
       "title": "Tekstury i materialy PBR generowane AI",
       "why": "Ladny model to w polowie tekstura. Tu szukamy generatorow map PBR i automatow do material instances.",
