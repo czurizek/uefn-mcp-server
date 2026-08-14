@@ -530,6 +530,254 @@ def search_assets(class_name: str = "", directory: str = "/Game/", recursive: bo
     return json.dumps(result, indent=2)
 
 
+# -- Geometry & mesh tools ----------------------------------------------------
+
+
+@mcp.tool()
+def get_static_mesh_stats(asset_path: str) -> str:
+    """Get LOD count, vertex counts, UV channels, collision, and Nanite status for a StaticMesh.
+
+    Args:
+        asset_path: Full asset path (e.g. '/Game/Meshes/SM_Rock').
+    """
+    result = _send_command("get_static_mesh_stats", {"asset_path": asset_path})
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def mesh_generate_lods(asset_path: str, lod_count: int = 4, base_percent_triangles: float = 0.5) -> str:
+    """Auto-generate simplified LODs for a StaticMesh.
+
+    LOD0 stays full detail; each further LOD reduces triangle count by
+    base_percent_triangles compounding (LOD1 ~= base, LOD2 ~= base^2, ...).
+
+    Args:
+        asset_path: Full asset path of the StaticMesh.
+        lod_count: Total number of LODs to generate, including LOD0.
+        base_percent_triangles: Triangle percentage kept per LOD step (0-1).
+    """
+    result = _send_command("mesh_generate_lods", {
+        "asset_path": asset_path,
+        "lod_count": lod_count,
+        "base_percent_triangles": base_percent_triangles,
+    })
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def mesh_add_collision(asset_path: str, shape_type: str = "Box") -> str:
+    """Add simple collision to a StaticMesh.
+
+    Args:
+        asset_path: Full asset path of the StaticMesh.
+        shape_type: One of Box, Sphere, Capsule, Convex, NDOP10, NDOP18, NDOP26.
+    """
+    result = _send_command("mesh_add_collision", {"asset_path": asset_path, "shape_type": shape_type})
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def mesh_boolean(mesh_a_path: str, mesh_b_path: str, output_path: str, operation: str = "Union") -> str:
+    """Combine two StaticMeshes with a boolean operation into a new asset.
+
+    EXPERIMENTAL: relies on Geometry Script's Python bindings, which can vary
+    slightly across UEFN versions. If it errors, the traceback pinpoints
+    exactly which struct/method needs adjusting.
+
+    Args:
+        mesh_a_path: First (target) StaticMesh asset path.
+        mesh_b_path: Second (tool) StaticMesh asset path.
+        output_path: Path for the new result asset (created by duplicating mesh_a_path).
+        operation: One of Union, Subtract, Intersection.
+    """
+    result = _send_command("mesh_boolean", {
+        "mesh_a_path": mesh_a_path,
+        "mesh_b_path": mesh_b_path,
+        "output_path": output_path,
+        "operation": operation,
+    })
+    return json.dumps(result, indent=2)
+
+
+# -- PCG tools -----------------------------------------------------------------
+
+
+@mcp.tool()
+def pcg_generate(actor_path: str, force: bool = True) -> str:
+    """Trigger (re)generation of an actor's existing PCG graph.
+
+    The actor must already have a PCG Component with a PCG Graph asset
+    assigned in-editor — this triggers execution, it does not author graphs.
+
+    Args:
+        actor_path: Actor path name or label.
+        force: Force regeneration even if already generated.
+    """
+    result = _send_command("pcg_generate", {"actor_path": actor_path, "force": force})
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def pcg_cleanup(actor_path: str, remove_components: bool = True) -> str:
+    """Remove a PCG actor's generated output.
+
+    Args:
+        actor_path: Actor path name or label.
+        remove_components: Also remove spawned component instances.
+    """
+    result = _send_command("pcg_cleanup", {"actor_path": actor_path, "remove_components": remove_components})
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def pcg_get_status(actor_path: str) -> str:
+    """Read the state of an actor's PCGComponent (generated flag, seed, graph asset).
+
+    Args:
+        actor_path: Actor path name or label.
+    """
+    result = _send_command("pcg_get_status", {"actor_path": actor_path})
+    return json.dumps(result, indent=2)
+
+
+# -- Niagara VFX tools ---------------------------------------------------------
+
+
+@mcp.tool()
+def niagara_spawn_effect(
+    system_path: str,
+    location: Optional[list[float]] = None,
+    rotation: Optional[list[float]] = None,
+) -> str:
+    """Spawn a Niagara system into the level as a NiagaraActor.
+
+    Args:
+        system_path: Asset path of the NiagaraSystem (e.g. '/Game/FX/NS_Fire').
+        location: [x, y, z] coordinates. Defaults to origin.
+        rotation: [pitch, yaw, roll] in degrees. Defaults to zero.
+    """
+    params: dict[str, Any] = {"system_path": system_path}
+    if location is not None:
+        params["location"] = location
+    if rotation is not None:
+        params["rotation"] = rotation
+    result = _send_command("niagara_spawn_effect", params)
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def niagara_set_parameter(actor_path: str, param_name: str, param_type: str, value: Any) -> str:
+    """Set a user parameter on a spawned Niagara effect.
+
+    Cannot create new effects or edit effect graphs — only adjusts exposed
+    user parameters on an already-spawned system (color, size, rate, etc.,
+    whatever the effect's author exposed as a User Parameter).
+
+    Args:
+        actor_path: Actor path name or label of the spawned Niagara actor.
+        param_name: User parameter name as defined in the Niagara system.
+        param_type: One of float, vector, color, bool, int.
+        value: Number for float/int/bool, [r,g,b,a] for color, [x,y,z] for vector.
+    """
+    result = _send_command("niagara_set_parameter", {
+        "actor_path": actor_path,
+        "param_name": param_name,
+        "param_type": param_type,
+        "value": value,
+    })
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def niagara_set_active(actor_path: str, active: bool = True, reset: bool = True) -> str:
+    """Activate or deactivate a spawned Niagara effect without destroying the actor.
+
+    Args:
+        actor_path: Actor path name or label.
+        active: True to activate, False to deactivate.
+        reset: When activating, restart the effect from scratch.
+    """
+    result = _send_command("niagara_set_active", {"actor_path": actor_path, "active": active, "reset": reset})
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def niagara_get_info(actor_path: str) -> str:
+    """Read basic state of a spawned Niagara effect (system asset, active, seed).
+
+    Args:
+        actor_path: Actor path name or label.
+    """
+    result = _send_command("niagara_get_info", {"actor_path": actor_path})
+    return json.dumps(result, indent=2)
+
+
+# -- Project health / asset validation tools ----------------------------------
+
+
+@mcp.tool()
+def validate_asset_naming(
+    directory: str = "/Game/",
+    rules: Optional[dict[str, str]] = None,
+    recursive: bool = True,
+) -> str:
+    """Check assets under a directory against prefix naming conventions.
+
+    Uses a built-in default rule set (StaticMesh->SM_, Material->M_,
+    MaterialInstanceConstant->MI_, Texture2D->T_, Blueprint->BP_,
+    NiagaraSystem->NS_, and more). Pass `rules` to add/override entries.
+
+    Args:
+        directory: Content directory to scan (e.g. '/Game/Meshes/').
+        rules: Optional dict of {class_name: expected_prefix} to add/override defaults.
+        recursive: Include subdirectories.
+    """
+    params: dict[str, Any] = {"directory": directory, "recursive": recursive}
+    if rules is not None:
+        params["rules"] = rules
+    result = _send_command("validate_asset_naming", params)
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def find_unused_assets(directory: str = "/Game/", recursive: bool = True) -> str:
+    """Find assets with no referencers in the project (candidates for cleanup).
+
+    Only sees references tracked by the asset database — cannot detect
+    assets referenced solely from Verse code, so review results before deleting.
+
+    Args:
+        directory: Content directory to scan.
+        recursive: Include subdirectories.
+    """
+    result = _send_command("find_unused_assets", {"directory": directory, "recursive": recursive})
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def check_static_mesh_health(
+    directory: str = "/Game/",
+    recursive: bool = True,
+    require_collision: bool = True,
+    require_lods: bool = True,
+) -> str:
+    """Scan StaticMesh assets under a directory for missing collision and/or LODs.
+
+    Args:
+        directory: Content directory to scan.
+        recursive: Include subdirectories.
+        require_collision: Flag meshes with no collision setup.
+        require_lods: Flag meshes with only a single LOD.
+    """
+    result = _send_command("check_static_mesh_health", {
+        "directory": directory,
+        "recursive": recursive,
+        "require_collision": require_collision,
+        "require_lods": require_lods,
+    })
+    return json.dumps(result, indent=2)
+
+
 # -- Project tools -----------------------------------------------------------
 
 

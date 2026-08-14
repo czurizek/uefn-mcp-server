@@ -180,6 +180,16 @@ def _serialize_actor(actor: unreal.Actor) -> dict:
     }
 
 
+def _find_actor(actor_path: str) -> Optional[unreal.Actor]:
+    """Find a level actor by path name or label. Used by handlers below that
+    need to look up a single actor's component (PCG, Niagara, ...)."""
+    actor_sub = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    for a in actor_sub.get_all_level_actors():
+        if a.get_path_name() == actor_path or a.get_actor_label() == actor_path:
+            return a
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
@@ -614,6 +624,481 @@ def _cmd_search_assets(class_name: str = "", directory: str = "/Game/", recursiv
                 continue
         results.append(_serialize(data))
     return {"assets": results, "count": len(results)}
+
+
+# -- Geometry & Meshes --------------------------------------------------------
+
+
+@_register("get_static_mesh_stats")
+def _cmd_get_static_mesh_stats(asset_path: str) -> dict:
+    """Read LOD/vertex/UV/collision/Nanite stats for a StaticMesh asset."""
+    mesh = unreal.EditorAssetLibrary.load_asset(asset_path)
+    if mesh is None:
+        raise ValueError(f"Asset not found: {asset_path}")
+    if not isinstance(mesh, unreal.StaticMesh):
+        raise ValueError(f"Asset is not a StaticMesh: {asset_path} ({mesh.get_class().get_name()})")
+
+    sm_sub = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+    result: Dict[str, Any] = {"asset_path": asset_path}
+
+    try:
+        lod_count = sm_sub.get_lod_count(mesh)
+        result["lod_count"] = lod_count
+        result["verts_per_lod"] = [sm_sub.get_number_verts(mesh, lod) for lod in range(lod_count)]
+    except Exception as e:
+        result["lod_count"] = None
+        result["verts_per_lod_error"] = str(e)
+
+    for attr, fn in [
+        ("num_uv_channels", lambda: sm_sub.get_num_uv_channels(mesh, 0)),
+        ("has_vertex_colors", lambda: sm_sub.has_vertex_colors(mesh)),
+        ("has_collision", lambda: mesh.get_editor_property("body_setup") is not None),
+        ("nanite_enabled", lambda: bool(mesh.get_editor_property("nanite_settings").enabled)),
+    ]:
+        try:
+            result[attr] = fn()
+        except Exception as e:
+            result[attr] = f"<error: {e}>"
+
+    return result
+
+
+@_register("mesh_generate_lods")
+def _cmd_mesh_generate_lods(
+    asset_path: str,
+    lod_count: int = 4,
+    base_percent_triangles: float = 0.5,
+) -> dict:
+    """Auto-generate simplified LODs for a StaticMesh.
+
+    LOD0 stays full detail. Each further LOD reduces triangle count further:
+    LOD1 ~= base_percent_triangles, LOD2 ~= base_percent_triangles^2, etc.
+    """
+    mesh = unreal.EditorAssetLibrary.load_asset(asset_path)
+    if mesh is None:
+        raise ValueError(f"Asset not found: {asset_path}")
+    if not isinstance(mesh, unreal.StaticMesh):
+        raise ValueError(f"Asset is not a StaticMesh: {asset_path}")
+    if lod_count < 1:
+        raise ValueError("lod_count must be >= 1")
+
+    sm_sub = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+
+    options = unreal.EditorScriptingMeshReductionOptions()
+    settings_list = []
+    for i in range(lod_count):
+        s = unreal.EditorScriptingMeshReductionSettings()
+        percent = 1.0 if i == 0 else max(0.02, base_percent_triangles ** i)
+        screen_size = max(0.02, 1.0 - i * (0.8 / max(lod_count - 1, 1)))
+        s.set_editor_property("percent_triangles", percent)
+        s.set_editor_property("screen_size", screen_size)
+        settings_list.append(s)
+    options.set_editor_property("reduction_settings", settings_list)
+    options.set_editor_property("apply_changes", True)
+
+    sm_sub.set_lods(mesh, options)
+    unreal.EditorAssetLibrary.save_asset(asset_path)
+
+    return {
+        "asset_path": asset_path,
+        "requested_lods": lod_count,
+        "actual_lod_count": sm_sub.get_lod_count(mesh),
+    }
+
+
+@_register("mesh_add_collision")
+def _cmd_mesh_add_collision(asset_path: str, shape_type: str = "Box") -> dict:
+    """Add simple collision to a StaticMesh.
+
+    shape_type: Box, Sphere, Capsule, Convex, NDOP10, NDOP18, or NDOP26.
+    """
+    mesh = unreal.EditorAssetLibrary.load_asset(asset_path)
+    if mesh is None:
+        raise ValueError(f"Asset not found: {asset_path}")
+    if not isinstance(mesh, unreal.StaticMesh):
+        raise ValueError(f"Asset is not a StaticMesh: {asset_path}")
+
+    shape_map = {
+        "box": "BOX", "sphere": "SPHERE", "capsule": "CAPSULE", "convex": "CONVEX",
+        "ndop10": "NDOP10_X", "ndop18": "NDOP18", "ndop26": "NDOP26",
+    }
+    key = shape_map.get(shape_type.lower())
+    if key is None:
+        raise ValueError(f"Unknown shape_type '{shape_type}'. Options: {list(shape_map.keys())}")
+    shape_enum = getattr(unreal.ScriptingCollisionShapeType, key, None)
+    if shape_enum is None:
+        raise ValueError(f"unreal.ScriptingCollisionShapeType has no member {key}")
+
+    sm_sub = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+    sm_sub.add_simple_collisions(mesh, shape_enum)
+    unreal.EditorAssetLibrary.save_asset(asset_path)
+    return {"asset_path": asset_path, "shape_type": shape_type}
+
+
+@_register("mesh_boolean")
+def _cmd_mesh_boolean(
+    mesh_a_path: str,
+    mesh_b_path: str,
+    output_path: str,
+    operation: str = "Union",
+) -> dict:
+    """Combine two StaticMeshes with a boolean operation (Union/Subtract/Intersection).
+
+    Writes the result into a new asset at output_path (created by duplicating
+    mesh_a_path first, so material slots carry over).
+
+    EXPERIMENTAL: Geometry Script's Python struct layout can vary across UEFN
+    versions. If this raises an AttributeError/TypeError, the traceback pinpoints
+    which class/field needs adjusting — check the equivalent Blueprint node
+    ("Apply Mesh Boolean" / "Copy Mesh From Static Mesh") for the current names.
+    """
+    mesh_a = unreal.EditorAssetLibrary.load_asset(mesh_a_path)
+    mesh_b = unreal.EditorAssetLibrary.load_asset(mesh_b_path)
+    if mesh_a is None:
+        raise ValueError(f"Asset not found: {mesh_a_path}")
+    if mesh_b is None:
+        raise ValueError(f"Asset not found: {mesh_b_path}")
+
+    op_key = operation.strip().upper()
+    if op_key == "INTERSECT":
+        op_key = "INTERSECTION"
+    if op_key not in ("UNION", "SUBTRACT", "INTERSECTION"):
+        raise ValueError("operation must be one of: Union, Subtract, Intersection")
+    op_enum = getattr(unreal.GeometryScriptBooleanOperation, op_key, None)
+    if op_enum is None:
+        raise ValueError(f"unreal.GeometryScriptBooleanOperation has no member {op_key}")
+
+    if not unreal.EditorAssetLibrary.does_asset_exist(output_path):
+        if unreal.EditorAssetLibrary.duplicate_asset(mesh_a_path, output_path) is None:
+            raise RuntimeError(f"Failed to create output asset at {output_path}")
+    target = unreal.EditorAssetLibrary.load_asset(output_path)
+
+    read_options = unreal.GeometryScriptCopyMeshFromAssetOptions()
+    lod_ref = unreal.GeometryScriptMeshReadLOD()
+
+    dyn_a = unreal.DynamicMesh()
+    dyn_b = unreal.DynamicMesh()
+    unreal.GeometryScript_AssetUtils.copy_mesh_from_static_mesh(mesh_a, dyn_a, read_options, lod_ref)
+    unreal.GeometryScript_AssetUtils.copy_mesh_from_static_mesh(mesh_b, dyn_b, read_options, lod_ref)
+
+    bool_options = unreal.GeometryScriptMeshBooleanOptions()
+    result_mesh = unreal.GeometryScript_MeshBooleanFunctions.apply_mesh_boolean(
+        dyn_a, unreal.Transform(), dyn_b, unreal.Transform(), op_enum, bool_options,
+    )
+
+    write_options = unreal.GeometryScriptCopyMeshToAssetOptions()
+    unreal.GeometryScript_AssetUtils.copy_mesh_to_static_mesh(result_mesh, target, write_options, lod_ref)
+    unreal.EditorAssetLibrary.save_asset(output_path)
+
+    return {
+        "output_path": output_path,
+        "operation": operation,
+        "source_a": mesh_a_path,
+        "source_b": mesh_b_path,
+    }
+
+
+# -- PCG (Procedural Content Generation) ---------------------------------------
+
+
+@_register("pcg_generate")
+def _cmd_pcg_generate(actor_path: str, force: bool = True) -> dict:
+    """Trigger (re)generation of an actor's existing PCG graph.
+
+    Does not author new PCG graphs — the actor must already have a PCG
+    Component with a PCG Graph asset assigned (set up manually in-editor).
+    """
+    actor = _find_actor(actor_path)
+    if actor is None:
+        raise ValueError(f"Actor not found: {actor_path}")
+    pcg_comp = actor.get_component_by_class(unreal.PCGComponent)
+    if pcg_comp is None:
+        raise ValueError(f"Actor has no PCGComponent: {actor_path}")
+
+    try:
+        pcg_comp.generate(force)
+    except TypeError:
+        pcg_comp.generate()
+
+    return {"actor_path": actor_path, "triggered": True}
+
+
+@_register("pcg_cleanup")
+def _cmd_pcg_cleanup(actor_path: str, remove_components: bool = True) -> dict:
+    """Remove a PCG actor's generated output."""
+    actor = _find_actor(actor_path)
+    if actor is None:
+        raise ValueError(f"Actor not found: {actor_path}")
+    pcg_comp = actor.get_component_by_class(unreal.PCGComponent)
+    if pcg_comp is None:
+        raise ValueError(f"Actor has no PCGComponent: {actor_path}")
+
+    try:
+        pcg_comp.cleanup(remove_components, False)
+    except TypeError:
+        pcg_comp.cleanup()
+
+    return {"actor_path": actor_path, "cleaned": True}
+
+
+@_register("pcg_get_status")
+def _cmd_pcg_get_status(actor_path: str) -> dict:
+    """Read the state of an actor's PCGComponent (generated flag, seed, graph asset)."""
+    actor = _find_actor(actor_path)
+    if actor is None:
+        raise ValueError(f"Actor not found: {actor_path}")
+    pcg_comp = actor.get_component_by_class(unreal.PCGComponent)
+    if pcg_comp is None:
+        raise ValueError(f"Actor has no PCGComponent: {actor_path}")
+
+    result: Dict[str, Any] = {"actor_path": actor_path}
+    for prop in ("generated", "seed", "graph"):
+        try:
+            result[prop] = _serialize(pcg_comp.get_editor_property(prop))
+        except Exception as e:
+            result[prop] = f"<error: {e}>"
+    return result
+
+
+# -- Niagara VFX ----------------------------------------------------------------
+
+
+@_register("niagara_spawn_effect")
+def _cmd_niagara_spawn_effect(
+    system_path: str,
+    location: Optional[List[float]] = None,
+    rotation: Optional[List[float]] = None,
+) -> dict:
+    """Spawn a Niagara system into the level as a NiagaraActor."""
+    system = unreal.EditorAssetLibrary.load_asset(system_path)
+    if system is None:
+        raise ValueError(f"Asset not found: {system_path}")
+    if not isinstance(system, unreal.NiagaraSystem):
+        raise ValueError(f"Asset is not a NiagaraSystem: {system_path}")
+
+    loc = unreal.Vector(*location) if location else unreal.Vector(0, 0, 0)
+    rot = unreal.Rotator(*rotation) if rotation else unreal.Rotator(0, 0, 0)
+    actor = unreal.EditorLevelLibrary.spawn_actor_from_object(system, loc, rot)
+    if actor is None:
+        raise RuntimeError("Failed to spawn Niagara actor")
+    return {"actor": _serialize_actor(actor)}
+
+
+# Method names for Niagara user-parameter setters have changed across UE
+# versions — try each candidate in order and report which one worked.
+_NIAGARA_SETTERS = {
+    "float": ["set_variable_float", "set_niagara_variable_float", "set_float_parameter"],
+    "vector": ["set_variable_vec3", "set_niagara_variable_vec3", "set_vector_parameter"],
+    "color": ["set_variable_linear_color", "set_niagara_variable_linear_color", "set_color_parameter"],
+    "bool": ["set_variable_bool", "set_niagara_variable_bool", "set_bool_parameter"],
+    "int": ["set_variable_int", "set_niagara_variable_int", "set_int_parameter"],
+}
+
+
+@_register("niagara_set_parameter")
+def _cmd_niagara_set_parameter(actor_path: str, param_name: str, param_type: str, value: Any) -> dict:
+    """Set a user parameter on a spawned Niagara effect's component.
+
+    param_type: one of float, vector, color, bool, int.
+    value: number for float/int/bool, [r,g,b,a] for color, [x,y,z] for vector.
+    """
+    actor = _find_actor(actor_path)
+    if actor is None:
+        raise ValueError(f"Actor not found: {actor_path}")
+    niagara_comp = actor.get_component_by_class(unreal.NiagaraComponent)
+    if niagara_comp is None:
+        raise ValueError(f"Actor has no NiagaraComponent: {actor_path}")
+
+    ptype = param_type.strip().lower()
+    candidates = _NIAGARA_SETTERS.get(ptype)
+    if candidates is None:
+        raise ValueError(f"param_type must be one of {list(_NIAGARA_SETTERS.keys())}")
+
+    if ptype == "color":
+        arg = value if isinstance(value, unreal.LinearColor) else unreal.LinearColor(*value)
+    elif ptype == "vector":
+        arg = value if isinstance(value, unreal.Vector) else unreal.Vector(*value)
+    else:
+        arg = value
+
+    for method_name in candidates:
+        method = getattr(niagara_comp, method_name, None)
+        if method is None:
+            continue
+        try:
+            method(param_name, arg)
+            return {"actor_path": actor_path, "param_name": param_name, "method_used": method_name}
+        except Exception:
+            continue
+
+    raise RuntimeError(
+        f"None of {candidates} worked on NiagaraComponent for param_type '{param_type}'. "
+        "Inspect dir(niagara_comp) via execute_python to find the correct method name "
+        "for this UEFN version."
+    )
+
+
+@_register("niagara_set_active")
+def _cmd_niagara_set_active(actor_path: str, active: bool = True, reset: bool = True) -> dict:
+    """Activate or deactivate a spawned Niagara effect without destroying the actor."""
+    actor = _find_actor(actor_path)
+    if actor is None:
+        raise ValueError(f"Actor not found: {actor_path}")
+    niagara_comp = actor.get_component_by_class(unreal.NiagaraComponent)
+    if niagara_comp is None:
+        raise ValueError(f"Actor has no NiagaraComponent: {actor_path}")
+
+    if active:
+        try:
+            niagara_comp.activate(reset)
+        except TypeError:
+            niagara_comp.activate()
+    else:
+        niagara_comp.deactivate()
+    return {"actor_path": actor_path, "active": active}
+
+
+@_register("niagara_get_info")
+def _cmd_niagara_get_info(actor_path: str) -> dict:
+    """Read basic state of a spawned Niagara effect (system asset, active, seed)."""
+    actor = _find_actor(actor_path)
+    if actor is None:
+        raise ValueError(f"Actor not found: {actor_path}")
+    niagara_comp = actor.get_component_by_class(unreal.NiagaraComponent)
+    if niagara_comp is None:
+        raise ValueError(f"Actor has no NiagaraComponent: {actor_path}")
+
+    result: Dict[str, Any] = {"actor_path": actor_path}
+    try:
+        asset = niagara_comp.get_editor_property("asset")
+        result["system_path"] = asset.get_path_name() if asset else None
+    except Exception as e:
+        result["system_path"] = f"<error: {e}>"
+    for prop in ("is_active", "seed"):
+        try:
+            result[prop] = _serialize(niagara_comp.get_editor_property(prop))
+        except Exception as e:
+            result[prop] = f"<error: {e}>"
+    return result
+
+
+# -- Project Health & Asset Validation ------------------------------------------
+
+_DEFAULT_NAMING_RULES = {
+    "StaticMesh": "SM_",
+    "Material": "M_",
+    "MaterialInstanceConstant": "MI_",
+    "Texture2D": "T_",
+    "Blueprint": "BP_",
+    "NiagaraSystem": "NS_",
+    "NiagaraEmitter": "NE_",
+    "SoundWave": "SW_",
+    "SoundCue": "SC_",
+    "LevelSequence": "LS_",
+}
+
+
+@_register("validate_asset_naming")
+def _cmd_validate_asset_naming(
+    directory: str = "/Game/",
+    rules: Optional[Dict[str, str]] = None,
+    recursive: bool = True,
+) -> dict:
+    """Check assets under directory against prefix naming rules (class -> expected prefix).
+
+    Defaults to a common convention (SM_, M_, MI_, T_, BP_, NS_, ...). Pass
+    `rules` to override/extend, e.g. {"StaticMesh": "SM_"}.
+    """
+    active_rules = dict(_DEFAULT_NAMING_RULES)
+    if rules:
+        active_rules.update(rules)
+
+    asset_paths = unreal.EditorAssetLibrary.list_assets(directory, recursive=recursive)
+    violations = []
+    checked = 0
+    for asset_path in asset_paths:
+        data = unreal.EditorAssetLibrary.find_asset_data(str(asset_path))
+        if data is None:
+            continue
+        cls = str(data.asset_class_path.asset_name) if hasattr(data, "asset_class_path") else str(getattr(data, "asset_class", ""))
+        prefix = active_rules.get(cls)
+        if prefix is None:
+            continue
+        checked += 1
+        name = str(data.asset_name)
+        if not name.startswith(prefix):
+            violations.append({
+                "asset_path": str(asset_path),
+                "asset_name": name,
+                "asset_class": cls,
+                "expected_prefix": prefix,
+            })
+    return {"checked": checked, "violations": violations, "violation_count": len(violations)}
+
+
+@_register("find_unused_assets")
+def _cmd_find_unused_assets(directory: str = "/Game/", recursive: bool = True) -> dict:
+    """Find assets under directory with no referencers (likely safe to remove).
+
+    Note: this only sees references inside the project's asset database — it
+    cannot detect assets referenced only from Verse code, so review before deleting.
+    """
+    asset_paths = unreal.EditorAssetLibrary.list_assets(directory, recursive=recursive)
+    unused = []
+    for asset_path in asset_paths:
+        path_str = str(asset_path)
+        try:
+            refs = unreal.EditorAssetLibrary.find_package_referencers_for_asset(path_str)
+        except Exception:
+            continue
+        if not refs:
+            unused.append(path_str)
+    return {"unused_assets": unused, "count": len(unused), "scanned": len(asset_paths)}
+
+
+@_register("check_static_mesh_health")
+def _cmd_check_static_mesh_health(
+    directory: str = "/Game/",
+    recursive: bool = True,
+    require_collision: bool = True,
+    require_lods: bool = True,
+) -> dict:
+    """Scan StaticMesh assets under directory for missing collision and/or LODs."""
+    asset_paths = unreal.EditorAssetLibrary.list_assets(directory, recursive=recursive)
+    sm_sub = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+
+    issues = []
+    checked = 0
+    for asset_path in asset_paths:
+        data = unreal.EditorAssetLibrary.find_asset_data(str(asset_path))
+        if data is None:
+            continue
+        cls = str(data.asset_class_path.asset_name) if hasattr(data, "asset_class_path") else str(getattr(data, "asset_class", ""))
+        if cls != "StaticMesh":
+            continue
+        checked += 1
+        mesh = unreal.EditorAssetLibrary.load_asset(str(asset_path))
+        if mesh is None:
+            continue
+
+        problems = []
+        if require_collision:
+            try:
+                if mesh.get_editor_property("body_setup") is None:
+                    problems.append("no_collision")
+            except Exception:
+                problems.append("collision_check_failed")
+        if require_lods:
+            try:
+                if sm_sub.get_lod_count(mesh) < 2:
+                    problems.append("single_lod_only")
+            except Exception:
+                problems.append("lod_check_failed")
+
+        if problems:
+            issues.append({"asset_path": str(asset_path), "problems": problems})
+
+    return {"checked": checked, "issues": issues, "issue_count": len(issues)}
 
 
 # -- Project -----------------------------------------------------------------
