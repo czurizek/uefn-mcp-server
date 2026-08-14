@@ -6,7 +6,7 @@ Control [UEFN](https://dev.epicgames.com/documentation/en-us/fortnite/unreal-edi
 Claude Code  <--stdio-->  MCP Server (mcp_server.py)  <--HTTP-->  Listener (uefn_listener.py, inside UEFN)
 ```
 
-- **28 tools**: actors, assets, levels, viewport, project info, editor log, and arbitrary Python execution
+- **42 tools**: actors, assets, levels, viewport, project info, editor log, mesh/geometry editing, PCG, Niagara VFX, project-health validation, and arbitrary Python execution
 - **Zero C++ compilation** — pure Python, works across UEFN versions
 - **Main-thread safe** — all `unreal.*` calls dispatched via editor tick callback
 
@@ -62,7 +62,7 @@ Create `.mcp.json` in your project root (or add to `~/.claude/settings.json`):
 
 ### 5. Restart Claude Code
 
-Claude Code picks up `.mcp.json` on startup. After restart, you'll have 28 UEFN tools available.
+Claude Code picks up `.mcp.json` on startup. After restart, you'll have 42 UEFN tools available.
 
 ### Try it
 
@@ -91,6 +91,10 @@ UEFN automatically executes `init_unreal.py` on project open.
 | **System** | `ping`, `execute_python`, `get_log`, `get_editor_log`, `shutdown` |
 | **Actors** | `get_all_actors`, `get_selected_actors`, `spawn_actor`, `delete_actors`, `set_actor_transform`, `get_actor_properties`, `set_actor_properties`, `select_actors`, `focus_selected` |
 | **Assets** | `list_assets`, `get_asset_info`, `get_selected_assets`, `rename_asset`, `delete_asset`, `duplicate_asset`, `does_asset_exist`, `save_asset`, `search_assets` |
+| **Geometry & Meshes** | `get_static_mesh_stats`, `mesh_generate_lods`, `mesh_add_collision`, `mesh_boolean` |
+| **PCG** | `pcg_generate`, `pcg_cleanup`, `pcg_get_status` |
+| **Niagara VFX** | `niagara_spawn_effect`, `niagara_set_parameter`, `niagara_set_active`, `niagara_get_info` |
+| **Project Health** | `validate_asset_naming`, `find_unused_assets`, `check_static_mesh_health` |
 | **Project** | `get_project_info` |
 | **Level** | `save_current_level`, `get_level_info` |
 | **Viewport** | `get_viewport_camera`, `set_viewport_camera` |
@@ -168,7 +172,7 @@ Run via **Tools > Execute Python Script** in the UEFN menu bar.
 | Document | Description |
 |----------|-------------|
 | [Setup Guide](docs/setup.md) | Detailed installation and configuration |
-| [Tools Reference](docs/tools_reference.md) | All 28 tools with parameters, examples, and responses |
+| [Tools Reference](docs/tools_reference.md) | All 42 tools with parameters, examples, and responses |
 | [Architecture](docs/architecture.md) | How the two-component system works internally |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
 | [UEFN Python Capabilities](docs/uefn_python_capabilities.md) | Full API capabilities map — 37K types across 30 domains |

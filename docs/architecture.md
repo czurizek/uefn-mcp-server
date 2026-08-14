@@ -41,7 +41,7 @@ The system consists of two independently running Python processes connected by H
 │  └──────────────────┘          └─────────────────────────┘  │
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │              Command Handlers (22)                    │   │
+│  │              Command Handlers (42)                    │   │
 │  │  ping, execute_python, get_all_actors, spawn_actor,  │   │
 │  │  list_assets, get_viewport_camera, ...               │   │
 │  └──────────────────────────────────────────────────────┘   │
@@ -111,7 +111,7 @@ def _cmd_my_command(param1: str, param2: int = 0) -> dict:
 │  │          FastMCP Framework           │  │
 │  │                                      │  │
 │  │  @mcp.tool() decorated functions     │  │
-│  │  22 tools matching listener commands │  │
+│  │  42 tools matching listener commands │  │
 │  └───────────────┬──────────────────────┘  │
 │                  │                          │
 │  ┌───────────────▼──────────────────────┐  │

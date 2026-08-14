@@ -1,6 +1,6 @@
 # Tools Reference
 
-28 tools organized in 6 categories. Each tool maps 1:1 to a listener command.
+42 tools organized in 10 categories. Each tool maps 1:1 to a listener command.
 
 ---
 
@@ -600,4 +600,301 @@ Get the UEFN project name and content root path. Use this to determine the corre
 **Response:**
 ```json
 { "project_name": "MyProject", "content_root": "/MyProject/", "project_dir": "../../../FortniteGame/" }
+```
+
+---
+
+## Geometry & Meshes
+
+### `get_static_mesh_stats`
+
+Read LOD, vertex, UV channel, collision, and Nanite stats for a StaticMesh asset.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `asset_path` | string | yes | Full asset path (e.g. `/Game/Meshes/SM_Rock`) |
+
+**Response:**
+```json
+{
+  "asset_path": "/Game/Meshes/SM_Rock",
+  "lod_count": 4,
+  "verts_per_lod": [1200, 640, 300, 120],
+  "num_uv_channels": 1,
+  "has_vertex_colors": false,
+  "has_collision": true,
+  "nanite_enabled": false
+}
+```
+
+---
+
+### `mesh_generate_lods`
+
+Auto-generate simplified LODs for a StaticMesh. LOD0 stays full detail; each further LOD reduces triangle count by `base_percent_triangles` compounding (LOD1 ~= base, LOD2 ~= base^2, ...).
+
+**Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `asset_path` | string | yes | — | Full asset path of the StaticMesh |
+| `lod_count` | int | no | 4 | Total number of LODs, including LOD0 |
+| `base_percent_triangles` | float | no | 0.5 | Triangle percentage kept per LOD step (0-1) |
+
+**Response:**
+```json
+{ "asset_path": "/Game/Meshes/SM_Rock", "requested_lods": 4, "actual_lod_count": 4 }
+```
+
+---
+
+### `mesh_add_collision`
+
+Add simple collision to a StaticMesh.
+
+**Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `asset_path` | string | yes | — | Full asset path of the StaticMesh |
+| `shape_type` | string | no | `Box` | One of Box, Sphere, Capsule, Convex, NDOP10, NDOP18, NDOP26 |
+
+**Response:**
+```json
+{ "asset_path": "/Game/Meshes/SM_Rock", "shape_type": "Box" }
+```
+
+---
+
+### `mesh_boolean`
+
+Combine two StaticMeshes with a boolean operation (Union/Subtract/Intersection) into a new asset, created by duplicating `mesh_a_path` so material slots carry over.
+
+> **Experimental:** relies on Geometry Script's Python bindings (`GeometryScript_AssetUtils`, `GeometryScript_MeshBooleanFunctions`), which can vary slightly across UEFN versions. If it errors, the traceback pinpoints exactly which struct or method needs adjusting — check the equivalent Blueprint nodes ("Apply Mesh Boolean" / "Copy Mesh From Static Mesh") for the current field names.
+
+**Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `mesh_a_path` | string | yes | — | First (target) StaticMesh asset path |
+| `mesh_b_path` | string | yes | — | Second (tool) StaticMesh asset path |
+| `output_path` | string | yes | — | Path for the new result asset |
+| `operation` | string | no | `Union` | One of Union, Subtract, Intersection |
+
+**Response:**
+```json
+{
+  "output_path": "/Game/Meshes/SM_Combined",
+  "operation": "Union",
+  "source_a": "/Game/Meshes/SM_A",
+  "source_b": "/Game/Meshes/SM_B"
+}
+```
+
+---
+
+## PCG (Procedural Content Generation)
+
+Triggers/reads an actor's **existing** PCG graph — none of these tools author new PCG node graphs; that still has to be built once in-editor.
+
+### `pcg_generate`
+
+Trigger (re)generation of an actor's PCG graph.
+
+**Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `actor_path` | string | yes | — | Actor path name or label |
+| `force` | bool | no | true | Force regeneration even if already generated |
+
+**Response:**
+```json
+{ "actor_path": "PCG_Forest", "triggered": true }
+```
+
+---
+
+### `pcg_cleanup`
+
+Remove a PCG actor's generated output.
+
+**Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `actor_path` | string | yes | — | Actor path name or label |
+| `remove_components` | bool | no | true | Also remove spawned component instances |
+
+**Response:**
+```json
+{ "actor_path": "PCG_Forest", "cleaned": true }
+```
+
+---
+
+### `pcg_get_status`
+
+Read the state of an actor's PCGComponent.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `actor_path` | string | yes | Actor path name or label |
+
+**Response:**
+```json
+{ "actor_path": "PCG_Forest", "generated": true, "seed": 42, "graph": "/Game/PCG/PCG_ForestGraph" }
+```
+
+---
+
+## Niagara VFX
+
+### `niagara_spawn_effect`
+
+Spawn a Niagara system into the level as a NiagaraActor.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `system_path` | string | yes | Asset path of the NiagaraSystem (e.g. `/Game/FX/NS_Fire`) |
+| `location` | float[3] | no | `[x, y, z]` coordinates. Defaults to origin |
+| `rotation` | float[3] | no | `[pitch, yaw, roll]` in degrees. Defaults to zero |
+
+**Response:** Same shape as `spawn_actor`.
+
+---
+
+### `niagara_set_parameter`
+
+Set a user parameter (float/vector/color/bool/int) on a spawned Niagara effect's component. Can only adjust parameters the effect's author already exposed as a User Parameter — cannot create effects or edit effect graphs.
+
+> **Note:** parameter-setter method names changed across UE versions. This tool tries several known names (`set_variable_float`, `set_niagara_variable_float`, ...) and reports which one worked via `method_used`.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `actor_path` | string | yes | Actor path name or label of the spawned Niagara actor |
+| `param_name` | string | yes | User parameter name as defined in the Niagara system |
+| `param_type` | string | yes | One of float, vector, color, bool, int |
+| `value` | any | yes | Number for float/int/bool, `[r,g,b,a]` for color, `[x,y,z]` for vector |
+
+**Response:**
+```json
+{ "actor_path": "NiagaraActor_1", "param_name": "Color", "method_used": "set_variable_linear_color" }
+```
+
+---
+
+### `niagara_set_active`
+
+Activate or deactivate a spawned Niagara effect without destroying the actor.
+
+**Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `actor_path` | string | yes | — | Actor path name or label |
+| `active` | bool | no | true | True to activate, false to deactivate |
+| `reset` | bool | no | true | When activating, restart the effect from scratch |
+
+**Response:**
+```json
+{ "actor_path": "NiagaraActor_1", "active": true }
+```
+
+---
+
+### `niagara_get_info`
+
+Read basic state of a spawned Niagara effect.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `actor_path` | string | yes | Actor path name or label |
+
+**Response:**
+```json
+{ "actor_path": "NiagaraActor_1", "system_path": "/Game/FX/NS_Fire", "is_active": true, "seed": 0 }
+```
+
+---
+
+## Project Health & Asset Validation
+
+### `validate_asset_naming`
+
+Check assets under a directory against prefix naming conventions. Ships with a default rule set (`StaticMesh`→`SM_`, `Material`→`M_`, `MaterialInstanceConstant`→`MI_`, `Texture2D`→`T_`, `Blueprint`→`BP_`, `NiagaraSystem`→`NS_`, and more) that `rules` can extend or override.
+
+**Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `directory` | string | no | `/Game/` | Content directory to scan |
+| `rules` | object | no | — | `{class_name: expected_prefix}` overrides/additions |
+| `recursive` | bool | no | true | Include subdirectories |
+
+**Response:**
+```json
+{
+  "checked": 84,
+  "violations": [
+    { "asset_path": "/Game/Meshes/Rock01", "asset_name": "Rock01", "asset_class": "StaticMesh", "expected_prefix": "SM_" }
+  ],
+  "violation_count": 1
+}
+```
+
+---
+
+### `find_unused_assets`
+
+Find assets with no referencers in the project's asset database (candidates for cleanup).
+
+> **Note:** only sees references tracked by the asset database — it cannot detect assets referenced solely from Verse code, so review results before deleting anything.
+
+**Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `directory` | string | no | `/Game/` | Content directory to scan |
+| `recursive` | bool | no | true | Include subdirectories |
+
+**Response:**
+```json
+{ "unused_assets": ["/Game/Materials/M_Old"], "count": 1, "scanned": 210 }
+```
+
+---
+
+### `check_static_mesh_health`
+
+Scan StaticMesh assets under a directory for missing collision and/or LODs.
+
+**Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `directory` | string | no | `/Game/` | Content directory to scan |
+| `recursive` | bool | no | true | Include subdirectories |
+| `require_collision` | bool | no | true | Flag meshes with no collision setup |
+| `require_lods` | bool | no | true | Flag meshes with only a single LOD |
+
+**Response:**
+```json
+{
+  "checked": 40,
+  "issues": [
+    { "asset_path": "/Game/Meshes/SM_Rock", "problems": ["no_collision", "single_lod_only"] }
+  ],
+  "issue_count": 1
+}
 ```
