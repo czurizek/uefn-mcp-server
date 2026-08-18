@@ -30,17 +30,59 @@ WORLD CITY
 | `world_city_leaderboard_device.verse` | Urządzenie z tabelą — cała UI i odświeżanie |
 | `world_city_cash_source_device.verse` | Opcjonalne: podpina istniejące triggery/przyciski pod `AddCash` bez pisania kodu |
 
-## Instalacja
+## Instalacja na mapie (np. Sp4nky)
 
-1. W UEFN otwórz projekt WORLD CITY.
-2. Skopiuj **cały folder** `world_city` do folderu Verse projektu
-   (np. `<TwojProjekt>/Content/world_city/`). Wszystkie trzy pliki muszą
-   zostać razem w jednym folderze — to jeden moduł Verse.
-3. **Verse > Build Verse Code** (Ctrl+Shift+B).
-4. W Content Browser pojawią się dwa urządzenia. Przeciągnij
-   **`world_city_leaderboard_device`** na wyspę (miejsce nie ma znaczenia,
-   panel jest w HUD).
-5. Uruchom sesję i sprawdź panel w prawym górnym rogu.
+Verse nie kompiluje się z Pythona (UEFN nie ma mostka do Verse), więc krok
+„Build Verse Code" zawsze zostaje po twojej stronie. Reszta jest automatyczna.
+
+### Wariant A — automatycznie, z Claude Code (serwer MCP z tego repo)
+
+1. Otwórz mapę **Sp4nky** w UEFN i uruchom listener (`uefn_listener.py`).
+2. Poproś Claude Code o instalację — pod spodem leci to przez `execute_python`:
+
+   ```python
+   import sys; sys.path.insert(0, r"C:/sciezka/do/uefn-mcp-server/tools")
+   import install_world_city
+   result = install_world_city.install(expect_project="Sp4nky")
+   ```
+
+   `expect_project` pilnuje, żeby pliki nie wjechały do innego projektu, gdyby
+   w UEFN była otwarta inna wyspa. Skrypt sam znajduje `verse/world_city`
+   obok siebie w repo; jeśli uruchamiasz go z innego miejsca, podaj
+   `source_dir=r"...\verse\world_city"`.
+
+3. W UEFN: **Verse > Build Verse Code** (Ctrl+Shift+B).
+4. Wstaw urządzenie na mapę:
+
+   ```python
+   result = install_world_city.place_device()
+   ```
+
+   Spawnuje `world_city_leaderboard_device` w (0,0,0) i nazywa je
+   `WORLD_CITY_Leaderboard` w Outlinerze. Panel jest w HUD, więc pozycja nie
+   ma znaczenia. Ponowne wywołanie nie zrobi duplikatu (chyba że `force=True`).
+
+5. Zapisz level i odpal sesję — panel jest w prawym górnym rogu.
+
+### Wariant B — bez MCP, z menu UEFN
+
+**Tools > Execute Python Script** → wskaż `tools/install_world_city.py`.
+Skrypt skopiuje pliki, a potem sam spróbuje wstawić urządzenie (jeśli Verse
+było już zbudowane) i wypisze w Output Logu, co zrobił. Po pierwszym
+uruchomieniu zbuduj Verse i odpal skrypt jeszcze raz.
+
+### Wariant C — ręcznie
+
+Skopiuj **cały folder** `world_city` do `<Sp4nky>/Content/world_city/`
+(wszystkie trzy pliki muszą zostać razem — to jeden moduł Verse),
+zbuduj Verse i przeciągnij `world_city_leaderboard_device` z Content Browsera
+na wyspę.
+
+### Aktualizacja
+
+Ponowna instalacja nadpisuje tylko to, co się zmieniło, a plik zmodyfikowany
+lokalnie zostawia w spokoju i mówi o tym w wyniku. Świadome nadpisanie:
+`install(force=True)`.
 
 ## Ustawienia (panel Details urządzenia)
 
