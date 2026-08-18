@@ -162,6 +162,16 @@ Run via **Tools > Execute Python Script** in the UEFN menu bar.
 | [`tools/dump_uefn_api.py`](tools/dump_uefn_api.py) | Dump all classes, enums, structs, functions to JSON |
 | [`tools/generate_uefn_stub.py`](tools/generate_uefn_stub.py) | Generate `.pyi` type stub for IDE autocomplete (37K+ types) |
 | [`tests/test_feasibility.py`](tests/test_feasibility.py) | Verify UEFN sandbox supports HTTP/threading for MCP |
+| [`tools/install_world_city.py`](tools/install_world_city.py) | Install the [WORLD CITY leaderboard](verse/world_city/) into the open project and place its device |
+
+## Verse Examples
+
+Python inside UEFN is editor-only, so gameplay logic lives in Verse. Ready-to-drop
+Verse systems are kept under `verse/`:
+
+| Example | Description |
+|---------|-------------|
+| [`verse/world_city/`](verse/world_city/) | WORLD CITY leaderboard — top 3 players on the server ranked by all-time cash and level, with a fourth slot that always shows the viewing player their own placement |
 
 ## Documentation
 
