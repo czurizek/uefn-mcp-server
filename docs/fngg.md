@@ -289,6 +289,7 @@ fngg benchmarks [GENRE]
 fngg stats
 fngg export [--format csv|json] [--genre G] [--out FILE]
 fngg probe [--code CODE]                       test fortnite.gg from this machine
+fngg capture [--scripts] [--out FILE]          dump fortnite.gg page structure for parser work
 ```
 
 Invoke as `python -m fngg <command>`.
@@ -361,8 +362,29 @@ Check what works from your machine:
 python -m fngg probe
 ```
 
-The result is shown on the Status tab. To add or reorder candidates without
-touching code, drop a file at `~/.fngg/fortnitegg_strategies.json`:
+The result is shown on the Status tab.
+
+### Helping someone write exact parsers
+
+Because fortnite.gg publishes no contract, writing precise parsers means seeing
+what the page actually serves. `capture` collects that diagnostic surface into one
+small file:
+
+```bash
+python -m fngg capture --scripts
+```
+
+It reports, per page: which candidate URLs resolved, every data-shaped URL
+referenced in the markup, the API endpoints named inside the site's own JavaScript
+bundles (`--scripts`), the shape of any embedded JSON, short markup snippets around
+island codes, and what the current parsers manage on their own.
+
+The bundle holds public page metadata only — URLs, JSON key names, and short
+markup snippets. It is written to `~/.fngg/fortnitegg-capture.json` and is small
+enough to attach when asking for parsers to be written against the live markup.
+
+To add or reorder candidates without touching code, drop a file at
+`~/.fngg/fortnitegg_strategies.json`:
 
 ```json
 {
@@ -432,4 +454,4 @@ stdlib-only.
 python -m unittest discover -s tests -p "test_fngg.py" -v
 ```
 
-69 tests, fully offline — no network, no live API.
+76 tests, fully offline — no network, no live API.

@@ -43,6 +43,8 @@ python -m fngg watch               # keep polling — this is what builds histor
   per genre: RP is retention-led, FFA is scale- and momentum-led.
 - **Zero dependencies** — stdlib only. The dashboard is server-rendered with inline
   SVG charts; no CDN, works offline, light and dark.
+- **Optional fortnite.gg adapter** for live concurrency and observed Discover rows,
+  with `fngg probe` / `fngg capture` to diagnose it against the live site.
 - **14 more MCP tools** via `fngg_mcp_server.py`, so you can ask Claude Code
   *"how does my RP map compare to its cohort, and what should I fix first?"* in the
   same session where you are building it.

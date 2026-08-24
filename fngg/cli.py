@@ -14,6 +14,7 @@ import argparse
 import csv
 import json
 import sys
+from pathlib import Path
 from typing import Optional, Sequence
 
 from . import __version__, config, poll, report as reporting, seed, store
@@ -130,6 +131,45 @@ def cmd_probe(args: argparse.Namespace) -> int:
     with store.open_db() as conn:
         store.set_meta(conn, "gg_probe", json.dumps(result))
         conn.commit()
+    return 0
+
+
+def cmd_capture(args: argparse.Namespace) -> int:
+    print("capturing fortnite.gg page structure from this machine…\n")
+    bundle = fortnitegg.capture(sample_code=args.code, fetch_scripts=args.scripts)
+
+    reachable = False
+    for kind, page in bundle["pages"].items():
+        resolved = page.get("resolved_url")
+        if not resolved:
+            print(f"{kind:10} unreachable — {len(page.get('attempts', []))} URLs tried")
+            continue
+        reachable = True
+        print(f"{kind:10} {resolved}")
+        print(f"           {page.get('bytes', 0):,} bytes · "
+              f"{page.get('island_codes_found', 0)} island codes · "
+              f"{page.get('current_parser_count', 0)} parsed by the current adapter")
+        if page.get("data_urls_in_markup"):
+            print(f"           data-shaped URLs: {', '.join(page['data_urls_in_markup'][:4])}")
+        for entry in page.get("script_scan") or []:
+            if entry.get("data_urls"):
+                print(f"           in {entry['url'].rsplit('/', 1)[-1]}: "
+                      f"{', '.join(entry['data_urls'][:4])}")
+        print()
+
+    out = Path(args.out) if args.out else config.data_dir() / "fortnitegg-capture.json"
+    out.write_text(json.dumps(bundle, indent=2, default=str), encoding="utf-8")
+    print(f"wrote {out} ({out.stat().st_size:,} bytes)")
+
+    if not reachable:
+        print("\nfortnite.gg did not respond at all from this machine.")
+        return 0
+
+    print(
+        "\nThis bundle holds public page metadata only — resolved URLs, JSON key names, "
+        "and short markup snippets around island codes. Attach it when asking for exact "
+        "parsers to be written against the live markup."
+    )
     return 0
 
 
@@ -341,6 +381,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("probe", help="check what fortnite.gg exposes from this machine")
     p.add_argument("--code", default="1865-4829-7018", help="island code to test with")
     p.set_defaults(func=cmd_probe)
+
+    p = sub.add_parser("capture", help="dump fortnite.gg page structure for parser work")
+    p.add_argument("--code", default="1865-4829-7018", help="island code to test with")
+    p.add_argument("--scripts", action="store_true",
+                   help="also download referenced JS bundles and scan them for API endpoints")
+    p.add_argument("--out", default=None, help="output path (default: $FNGG_HOME/fortnitegg-capture.json)")
+    p.set_defaults(func=cmd_capture)
 
     p = sub.add_parser("track", help="mark islands as priority — polled first, every run")
     p.add_argument("codes", nargs="+")

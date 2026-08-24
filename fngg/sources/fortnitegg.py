@@ -35,7 +35,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, Sequence
 
 from .. import config
 from ..http_client import HttpError, NotFound, get_text
@@ -211,6 +211,26 @@ def _pick(record: dict, aliases: tuple[str, ...]) -> Any:
     return None
 
 
+
+def _flatten_markup(html: str) -> str:
+    """Turn markup into newline-separated text, keeping island codes from attributes.
+
+    On a real listing page the code is in `<a href="/island?code=1234-5678-9012">`,
+    not in a text node. Blindly stripping tags therefore deletes exactly the thing
+    we are looking for, so each tag is replaced by a newline plus any island code
+    it contained - which also preserves document order for row attribution.
+    """
+    without_scripts = re.sub(
+        r"<(?:script|style)[^>]*>.*?</(?:script|style)>", " ", html, flags=re.S | re.I
+    )
+
+    def replace(match: "re.Match[str]") -> str:
+        codes = CODE_RE.findall(match.group(0))
+        return "\n" + (" ".join(codes) + "\n" if codes else "")
+
+    return re.sub(r"<[^>]+>", replace, without_scripts)
+
+
 @dataclass
 class GGIsland:
     code: Optional[str] = None
@@ -258,16 +278,16 @@ def parse_islands_from_html(html: str, source_url: str = "") -> list[GGIsland]:
             if island and island.code and island.code not in out:
                 island.source_url = source_url
                 out[island.code] = island
-    if out:
-        return list(out.values())
 
-    # Fallback: no usable JSON. Pull codes with a following number from markup.
-    text = re.sub(r"<[^>]+>", " ", html)
+    # Always also scan the markup. A page that embeds JSON for one hero tile and
+    # renders the other 200 as plain HTML is common, so treating embedded JSON as
+    # the complete answer silently loses almost everything.
+    text = _flatten_markup(html)
     for match in CODE_RE.finditer(text):
         code = match.group(0)
         if code in out:
             continue
-        tail = text[match.end() : match.end() + 160]
+        tail = text[match.end() : match.end() + 200]
         number = re.search(r"([\d][\d,\.\s]*[KMB]?)\s*(?:players|playing|online)", tail, re.I)
         island = GGIsland(code=code, source_url=source_url)
         if number:
@@ -301,11 +321,14 @@ def parse_discovery_rows(html: str, source_url: str = "") -> list[GGIsland]:
     specific CSS selector does not.
     """
     entries: list[GGIsland] = []
-    plain = re.sub(r"<(?:script|style)[^>]*>.*?</(?:script|style)>", " ", html, flags=re.S | re.I)
-    plain = re.sub(r"<[^>]+>", "\n", plain)
+    plain = _flatten_markup(html)
 
     current_label: Optional[str] = None
     position = 0
+    # One tile can name its code more than once (a data- attribute and an href),
+    # so track what this row has already yielded - otherwise positions shift and
+    # the second island in a row gets recorded as the third.
+    seen_in_row: set[str] = set()
     for line in plain.splitlines():
         stripped = line.strip()
         if not stripped:
@@ -314,10 +337,12 @@ def parse_discovery_rows(html: str, source_url: str = "") -> list[GGIsland]:
         if heading and len(stripped) <= 60:
             current_label = heading.group(0).strip()
             position = 0
+            seen_in_row = set()
             continue
         for match in CODE_RE.finditer(stripped):
-            if not current_label:
+            if not current_label or match.group(0) in seen_in_row:
                 continue
+            seen_in_row.add(match.group(0))
             position += 1
             entries.append(
                 GGIsland(
@@ -431,6 +456,160 @@ def probe(sample_code: str = "1865-4829-7018") -> dict:
     return report
 
 
+
+# ------------------------------------------------------------------ capture
+
+# URL-shaped strings worth reporting: the ones that look like a data endpoint
+# rather than an image or a stylesheet.
+_ENDPOINT_RE = re.compile(
+    r"""["'`(]\s*(/?[\w./?=&%~+-]*(?:api|\.json|/data|chart|count|stats|graph|players)"""
+    r"""[\w./?=&%~+-]*)\s*["'`)]""",
+    re.I,
+)
+_SCRIPT_SRC_RE = re.compile(r'<script[^>]+src=["\']([^"\']+)["\']', re.I)
+_ASSET_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".css", ".woff", ".woff2", ".ico")
+
+MAX_SNIPPET = 500
+MAX_BLOB_SAMPLE = 1200
+
+
+def _looks_like_endpoint(url: str) -> bool:
+    lowered = url.lower()
+    if lowered.endswith(_ASSET_SUFFIXES):
+        return False
+    return len(url) > 4 and not lowered.startswith("data:")
+
+
+def _describe_json(blob: Any) -> Optional[dict]:
+    """Shape of an embedded JSON blob, plus one record that carries an island code."""
+    keys: list[str] = []
+    if isinstance(blob, dict):
+        keys = [str(k) for k in list(blob)[:25]]
+    elif isinstance(blob, list) and blob and isinstance(blob[0], dict):
+        keys = [str(k) for k in list(blob[0])[:25]]
+    if not keys:
+        return None
+
+    sample = None
+    for record in _walk(blob):
+        text = " ".join(str(v) for v in record.values() if not isinstance(v, (dict, list)))
+        if CODE_RE.search(text):
+            sample = json.dumps(record, ensure_ascii=False, default=str)[:MAX_BLOB_SAMPLE]
+            break
+    return {"top_level_keys": keys, "record_with_island_code": sample}
+
+
+def capture(sample_code: str = "1865-4829-7018", *, fetch_scripts: bool = False) -> dict:
+    """Collect what a parser author would need, without exposing the whole page.
+
+    fortnite.gg publishes no contract, so writing exact parsers means looking at
+    what the page actually serves. This gathers the diagnostic surface - candidate
+    URLs that resolve, data-shaped URLs referenced in the markup, the shape of any
+    embedded JSON, and short snippets around island codes - into one small bundle
+    that can be handed to someone with no access to the site.
+
+    Set fetch_scripts to also download referenced JS bundles and scan them for
+    endpoints, which is usually where a site's real JSON API is named.
+    """
+    bundle: dict[str, Any] = {
+        "captured_at": now_iso(),
+        "sample_code": sample_code,
+        "pages": {},
+        "notes": [
+            "Generated by `fngg capture`. Contains public page metadata only: URLs, "
+            "JSON key names, and short markup snippets around island codes.",
+        ],
+    }
+
+    for kind, fmt in (("island", {"code": sample_code}), ("browse", {}), ("discovery", {})):
+        html, url, attempts = _try_urls(kind, **fmt)
+        page: dict[str, Any] = {
+            "attempts": [
+                {"url": a.url, "ok": a.ok, "detail": a.detail[:200]} for a in attempts
+            ],
+            "resolved_url": url,
+        }
+
+        if not html:
+            bundle["pages"][kind] = page
+            continue
+
+        page["bytes"] = len(html)
+        page["title"] = _page_title(html)
+
+        codes = sorted({m.group(0) for m in CODE_RE.finditer(html)})
+        page["island_codes_found"] = len(codes)
+        page["island_codes_sample"] = codes[:10]
+
+        endpoints = sorted(
+            {m.group(1) for m in _ENDPOINT_RE.finditer(html) if _looks_like_endpoint(m.group(1))}
+        )
+        page["data_urls_in_markup"] = endpoints[:40]
+
+        scripts = sorted({m.group(1) for m in _SCRIPT_SRC_RE.finditer(html)})
+        page["script_files"] = scripts[:20]
+
+        blobs = []
+        for blob in find_embedded_json(html):
+            described = _describe_json(blob)
+            if described:
+                blobs.append(described)
+        page["embedded_json"] = blobs[:8]
+
+        # Raw markup around the first few codes - this is what a parser matches on.
+        snippets = []
+        for match in list(CODE_RE.finditer(html))[:3]:
+            start = max(0, match.start() - MAX_SNIPPET // 2)
+            snippets.append(html[start : match.end() + MAX_SNIPPET // 2])
+        page["markup_around_codes"] = snippets
+
+        # What the current parsers manage on their own.
+        parsed = (
+            parse_discovery_rows(html, url or "")
+            if kind == "discovery"
+            else parse_islands_from_html(html, url or "")
+        )
+        page["current_parser_extracted"] = [
+            {k: v for k, v in vars(entry).items() if v is not None} for entry in parsed[:5]
+        ]
+        page["current_parser_count"] = len(parsed)
+
+        if fetch_scripts and scripts:
+            page["script_scan"] = _scan_scripts(scripts, url or "")
+
+        bundle["pages"][kind] = page
+
+    return bundle
+
+
+def _page_title(html: str) -> Optional[str]:
+    match = re.search(r"<title[^>]*>(.*?)</title>", html, re.S | re.I)
+    return match.group(1).strip()[:200] if match else None
+
+
+def _scan_scripts(scripts: Sequence[str], base_url: str, limit: int = 5) -> list[dict]:
+    """Download referenced JS bundles and pull data-shaped URLs out of them."""
+    import urllib.parse
+
+    out = []
+    for src in list(scripts)[:limit]:
+        url = urllib.parse.urljoin(base_url or config.FORTNITE_GG_BASE, src)
+        entry: dict[str, Any] = {"url": url}
+        try:
+            body = get_text(url, retries=1)
+        except Exception as exc:
+            entry["error"] = f"{type(exc).__name__}: {exc}"[:160]
+            out.append(entry)
+            continue
+        entry["bytes"] = len(body)
+        found = sorted(
+            {m.group(1) for m in _ENDPOINT_RE.finditer(body) if _looks_like_endpoint(m.group(1))}
+        )
+        entry["data_urls"] = found[:40]
+        out.append(entry)
+    return out
+
+
 __all__ = [
     "GGIsland",
     "StrategyResult",
@@ -444,4 +623,5 @@ __all__ = [
     "fetch_browse",
     "fetch_discovery",
     "probe",
+    "capture",
 ]

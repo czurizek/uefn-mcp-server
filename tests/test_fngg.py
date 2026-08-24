@@ -479,6 +479,95 @@ class TestFortniteGG(unittest.TestCase):
         html = '<script>var x={"code":"not-a-code","players":10};</script>'
         self.assertEqual(fortnitegg.parse_islands_from_html(html), [])
 
+    # A page as a real listing serves it: codes live in href attributes, and only
+    # the hero tile carries embedded JSON.
+    REAL_SHAPED = """
+    <html><body>
+      <h2>Epic's Picks</h2>
+      <div data-map='{"code":"1865-4829-7018","title":"Tokyo City RP","players":12934,"peak":18402}'>
+        <a href="/island?code=1865-4829-7018">Tokyo City RP</a><span>12,934 players</span></div>
+      <div><a href="/island?code=4021-9987-1122">Neon FFA</a><span>3.1K players</span></div>
+      <h2>Popular</h2>
+      <div><a href="/island?code=7788-1234-9090">Frostlands</a><span>842 players</span></div>
+    </body></html>
+    """
+
+    def test_finds_codes_that_only_exist_in_href_attributes(self):
+        found = {i.code for i in fortnitegg.parse_islands_from_html(self.REAL_SHAPED)}
+        self.assertEqual(found, {"1865-4829-7018", "4021-9987-1122", "7788-1234-9090"})
+
+    def test_markup_scan_supplements_embedded_json(self):
+        # One tile has JSON, the rest are plain HTML. Treating the JSON as the
+        # complete answer would silently drop almost the whole page.
+        islands = {i.code: i for i in fortnitegg.parse_islands_from_html(self.REAL_SHAPED)}
+        self.assertEqual(islands["1865-4829-7018"].peak_24h, 18402.0)   # from JSON
+        self.assertEqual(islands["4021-9987-1122"].ccu, 3100.0)         # from markup
+
+    def test_discovery_rows_read_codes_from_hrefs(self):
+        rows = fortnitegg.parse_discovery_rows(self.REAL_SHAPED)
+        by_row = {}
+        for entry in rows:
+            by_row.setdefault(entry.row_key, []).append(entry.code)
+        self.assertEqual(by_row["epic_s_picks"], ["1865-4829-7018", "4021-9987-1122"])
+        self.assertEqual(by_row["popular"], ["7788-1234-9090"])
+
+    def test_duplicate_code_in_one_tile_does_not_shift_positions(self):
+        rows = fortnitegg.parse_discovery_rows(self.REAL_SHAPED)
+        picks = [r for r in rows if r.row_key == "epic_s_picks"]
+        # The hero tile names its code twice (data attribute + href).
+        self.assertEqual([r.position for r in picks], [1, 2])
+
+    def test_same_island_may_appear_in_two_rows(self):
+        html = """
+        <h2>Epic's Picks</h2><div><a href="/island?code=1111-2222-3333">A</a></div>
+        <h2>Popular</h2><div><a href="/island?code=1111-2222-3333">A</a></div>
+        """
+        rows = fortnitegg.parse_discovery_rows(html)
+        self.assertEqual({r.row_key for r in rows}, {"epic_s_picks", "popular"})
+
+    def test_capture_reports_endpoints_and_parser_state(self):
+        captured = {}
+
+        def fake_get_text(url, **kwargs):
+            captured[url] = True
+            if url.endswith(".js"):
+                return 'fetch("/api/v2/island-stats.json?code="+c);'
+            return (
+                self.REAL_SHAPED
+                + '<script src="/js/app.js"></script>'
+                + '<script>var C="/api/chart-data.php?id=1&range=30d";</script>'
+            )
+
+        original = fortnitegg.get_text
+        fortnitegg.get_text = fake_get_text
+        try:
+            bundle = fortnitegg.capture(sample_code="1865-4829-7018", fetch_scripts=True)
+        finally:
+            fortnitegg.get_text = original
+
+        page = bundle["pages"]["browse"]
+        self.assertEqual(page["island_codes_found"], 3)
+        self.assertIn("/api/chart-data.php?id=1&range=30d", page["data_urls_in_markup"])
+        self.assertTrue(page["embedded_json"])
+        self.assertEqual(page["current_parser_count"], 3)
+        # Script scanning is where a site's real JSON API usually surfaces.
+        scanned = [u for entry in page["script_scan"] for u in entry.get("data_urls", [])]
+        self.assertTrue(any("island-stats.json" in u for u in scanned))
+
+    def test_capture_survives_an_unreachable_site(self):
+        def boom(url, **kwargs):
+            raise fortnitegg.HttpError("network error")
+
+        original = fortnitegg.get_text
+        fortnitegg.get_text = boom
+        try:
+            bundle = fortnitegg.capture()
+        finally:
+            fortnitegg.get_text = original
+        for page in bundle["pages"].values():
+            self.assertIsNone(page["resolved_url"])
+            self.assertTrue(page["attempts"])
+
     def test_strategies_include_the_three_kinds(self):
         strategies = fortnitegg.load_strategies()
         for kind in ("island", "browse", "discovery"):
