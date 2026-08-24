@@ -27,7 +27,17 @@ import urllib.error
 import urllib.request
 from typing import Any, Optional
 
-from mcp.server.fastmcp import FastMCP
+try:  # mcp >= 2.0 renamed FastMCP to MCPServer; the tool/run API is unchanged.
+    from mcp.server.mcpserver import MCPServer as _McpServer
+except ImportError:  # pragma: no cover - depends on which SDK version is installed
+    try:
+        from mcp.server.fastmcp import FastMCP as _McpServer
+    except ImportError:
+        print(
+            "This server requires the MCP SDK. Install it with:  pip install mcp",
+            file=sys.stderr,
+        )
+        raise
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -177,7 +187,7 @@ threading.Thread(target=_heartbeat_loop, daemon=True).start()
 # MCP Server
 # ---------------------------------------------------------------------------
 
-mcp = FastMCP(
+mcp = _McpServer(
     "uefn-mcp",
     instructions=(
         "MCP server for controlling UEFN (Unreal Editor for Fortnite). "

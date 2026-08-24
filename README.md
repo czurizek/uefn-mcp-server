@@ -6,9 +6,54 @@ Control [UEFN](https://dev.epicgames.com/documentation/en-us/fortnite/unreal-edi
 Claude Code  <--stdio-->  MCP Server (mcp_server.py)  <--HTTP-->  Listener (uefn_listener.py, inside UEFN)
 ```
 
-- **28 tools**: actors, assets, levels, viewport, project info, editor log, and arbitrary Python execution
+- **28 editor tools**: actors, assets, levels, viewport, project info, editor log, and arbitrary Python execution
+- **14 island-analytics tools**: Discovery scoring, cohort benchmarks, movers (see [`fngg`](#island-analytics-fngg) below)
 - **Zero C++ compilation** — pure Python, works across UEFN versions
 - **Main-thread safe** — all `unreal.*` calls dispatched via editor tick callback
+
+## Island Analytics (`fngg`)
+
+Alongside the editor bridge, this repo ships **fngg** — a local app for browsing
+Fortnite islands and analysing why they do or do not surface in Discover, with the
+analytics tuned for **RP, FFA and open-world** maps.
+
+```bash
+python -m fngg demo     # sample data, so you can look around right now
+python -m fngg serve    # dashboard at http://127.0.0.1:8770
+```
+
+Real data instead of samples:
+
+```bash
+python -m fngg sync --limit 2000   # pull Epic's public island catalogue
+python -m fngg poll                # take one metric reading per island
+python -m fngg watch               # keep polling — this is what builds history
+```
+
+- **Discovery Fitness** — a 0-100 score per island built on Epic's *documented*
+  Discover inputs, broken into scale / retention / session depth / advocacy /
+  momentum, each as a percentile against comparable islands. Comes with a ranked
+  list of which weakness is actually worth fixing first.
+- **Discover row fit** — the same measurements re-weighted per row (Popular,
+  Trending, New Releases, By Players Like You, Community Choice, Top Charts), so
+  you can see which tab your island is built for. Curated rows are reported as
+  not-modelled, never scored.
+- **Genre-aware cohorts** — an RP city with 90-minute sessions and a box-fight map
+  with 4-minute sessions are never benchmarked against each other. Weights differ
+  per genre: RP is retention-led, FFA is scale- and momentum-led.
+- **Zero dependencies** — stdlib only. The dashboard is server-rendered with inline
+  SVG charts; no CDN, works offline, light and dark.
+- **14 more MCP tools** via `fngg_mcp_server.py`, so you can ask Claude Code
+  *"how does my RP map compare to its cohort, and what should I fix first?"* in the
+  same session where you are building it.
+
+> Epic's Ecosystem API returns one live reading per metric and refuses data older
+> than about six days — it never backfills. A day you did not poll is a day nobody
+> can reconstruct, which is why fngg keeps its own append-only snapshot log.
+
+Full guide: **[docs/fngg.md](docs/fngg.md)**
+
+---
 
 ## Quick Start
 
@@ -172,6 +217,7 @@ Run via **Tools > Execute Python Script** in the UEFN menu bar.
 | [Architecture](docs/architecture.md) | How the two-component system works internally |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
 | [UEFN Python Capabilities](docs/uefn_python_capabilities.md) | Full API capabilities map — 37K types across 30 domains |
+| [Island Analytics (`fngg`)](docs/fngg.md) | Browsing and Discovery analytics for RP / FFA / open-world maps |
 
 ## Requirements
 
