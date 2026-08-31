@@ -163,6 +163,17 @@ Run via **Tools > Execute Python Script** in the UEFN menu bar.
 | [`tools/generate_uefn_stub.py`](tools/generate_uefn_stub.py) | Generate `.pyi` type stub for IDE autocomplete (37K+ types) |
 | [`tests/test_feasibility.py`](tests/test_feasibility.py) | Verify UEFN sandbox supports HTTP/threading for MCP |
 
+## Verse Templates
+
+This server's Python tools only reach the UEFN *editor* (placing/scaling actors,
+managing assets, etc.) — there's no Python bridge into Verse, so runtime gameplay
+logic (AI behavior, timers, targeting) has to be Verse code, wired up by hand in
+the editor once.
+
+| Template | Description |
+|----------|-------------|
+| [`verse_templates/brainrot_boss_event.verse`](verse_templates/brainrot_boss_event.verse) | Giant boss device: breathes fire and jumps at a random player every 30s |
+
 ## Documentation
 
 | Document | Description |
